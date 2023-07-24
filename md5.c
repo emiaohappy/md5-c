@@ -4,6 +4,7 @@
  */
 
 #include "md5.h"
+#include "fat_wrapper.h"
 
 /*
  * Constants defined by the MD5 algorithm
@@ -81,7 +82,7 @@ void md5Init(MD5Context *ctx) {
  * If the input fills out a block of 512 bits, apply the algorithm (md5Step)
  * and save the result in the buffer. Also updates the overall size.
  */
-void md5Update(MD5Context *ctx, uint8_t *input_buffer, size_t input_len) {
+void md5Update(MD5Context *ctx, const uint8_t *input_buffer, size_t input_len) {
     uint32_t input[16];
     unsigned int offset = ctx->size % 64;
     ctx->size += (uint64_t) input_len;
@@ -120,7 +121,7 @@ void md5Finalize(MD5Context *ctx) {
     unsigned int padding_length = offset < 56 ? 56 - offset : (56 + 64) - offset;
 
     // Fill in the padding and undo the changes to size that resulted from the update
-    md5Update(ctx, PADDING, padding_length);
+    md5Update(ctx, (uint8_t *) PADDING, padding_length);
     ctx->size -= (uint64_t) padding_length;
 
     // Do a final update (internal to this function)
@@ -205,19 +206,19 @@ void md5String(char *input, uint8_t *result) {
 }
 
 void md5File(FILE *file, uint8_t *result) {
-    char *input_buffer = malloc(1024);
+#define INPUT_BUFFER_SIZE (1024)
+    char *input_buffer[INPUT_BUFFER_SIZE] = {0};
     size_t input_size = 0;
 
     MD5Context ctx;
     md5Init(&ctx);
 
-    while ((input_size = fread(input_buffer, 1, 1024, file)) > 0) {
+    while ((input_size = fat_file_read(file, input_buffer, INPUT_BUFFER_SIZE, NULL)) > 0) {
         md5Update(&ctx, (uint8_t *) input_buffer, input_size);
+        memset(input_buffer, 0, INPUT_BUFFER_SIZE);
     }
 
     md5Finalize(&ctx);
-
-    free(input_buffer);
 
     memcpy(result, ctx.digest, 16);
 }
